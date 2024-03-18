@@ -4,34 +4,47 @@ use std::error::Error;
 use std::fmt;
 use std::io::Read;
 
-#[derive(Debug, Deserialize)]
-enum RowType {
-    #[serde(rename = "C")]
-    Control,
-    #[serde(rename = "I")]
-    Information,
-    #[serde(rename = "D")]
-    Data,
+// Trait for InformationRow
+pub trait InformationRowTrait: for<'de> Deserialize<'de> + fmt::Debug + fmt::Display {}
+
+// Trait for DataRow
+pub trait DataRowTrait: for<'de> Deserialize<'de> + fmt::Debug + fmt::Display {}
+
+pub trait RowMatcher {
+    fn match_row(&self, record: &csv::StringRecord) -> RowAction;
 }
 
-#[derive(PartialEq, Eq)]
-enum ParseState {
-    Control,
-    Information,
-    Data,
+struct MyCustomMatcher;
+
+impl RowMatcher for MyCustomMatcher {
+    fn match_row(&self, record: &csv::StringRecord) -> RowAction {
+        if record.get(0) == Some("I") && record.get(2) == Some("ACTUAL") {
+            RowAction::InformationRow
+        } else if record.get(0) == Some("D") {
+            RowAction::DataRow
+        } else if record.get(0) == Some("C") {
+            RowAction::ControlRow
+        } else {
+            RowAction::Ignore
+        }
+    }
 }
 
-pub trait ParsedData
-where
-    Self::InformationRow: for<'de> Deserialize<'de> + fmt::Debug + fmt::Display,
-    Self::DataRow: for<'de> Deserialize<'de> + fmt::Debug + fmt::Display,
-{
-    type InformationRow;
-    type DataRow;
+pub enum RowAction {
+    InformationRow,
+    DataRow,
+    ControlRow,
+    Ignore, // Use this to ignore rows that don't match any criteria
+}
+
+pub trait ParsedData {
+    type InformationRow: InformationRowTrait;
+    type DataRow: DataRowTrait;
+    type Matcher: RowMatcher;
 
     fn new() -> Self;
-    fn add_information_row(&mut self, row: Self::InformationRow);
-    fn add_data_row(&mut self, row: Self::DataRow);
+    fn add_rows(&mut self, rows: Vec<(Self::InformationRow, Vec<Self::DataRow>)>);
+    fn matcher(&self) -> &Self::Matcher;
 }
 
 pub fn parse_csv<R: Read, T: ParsedData>(reader: R) -> Result<T, Box<dyn Error>> {
@@ -42,39 +55,31 @@ pub fn parse_csv<R: Read, T: ParsedData>(reader: R) -> Result<T, Box<dyn Error>>
         .from_reader(reader);
 
     let mut parsed_data = T::new();
-    let mut state = ParseState::Control;
+    let mut rows: Vec<(<T as ParsedData>::InformationRow, Vec<<T as ParsedData>::DataRow>)> = Vec::new();
+    let mut current_data_rows = Vec::new();
+    let mut current_info_row: Option<T::InformationRow> = None;
+
     for result in rdr.records() {
         let record = result?;
-        let first_cell = record.get(0).unwrap_or("");
+        let action = parsed_data.matcher().match_row(&record);
 
-        match first_cell {
-            "I" => {
-                state = ParseState::Information;
-                let information_row: T::InformationRow = record.deserialize(None)?;
-                parsed_data.add_information_row(information_row);
-            }
-            "D" => {
-                state = ParseState::Data;
-                let data_row: T::DataRow = record.deserialize(None)?;
-                parsed_data.add_data_row(data_row);
-                // No need to change state, directly handling based on row type
-            }
-            "C" => {
-                if state == ParseState::Data
-                    && record.get(1).unwrap_or("").to_uppercase() == "END OF REPORT"
-                {
-                    break;
-                }
-                continue;
-            }
-            _ => {
-                // Handle unexpected row types
-                return Err(From::from(format!(
-                    "Unexpected row type or transition: {}",
-                    first_cell
-                )));
-            }
+        match action {
+            RowAction::InformationRow => {
+                // Process as information row
+            },
+            RowAction::DataRow => {
+                // Process as data row
+            },
+            RowAction::ControlRow => {
+                // Process as control row
+            },
+            RowAction::Ignore => {
+                // Ignore this row
+            },
         }
     }
+
+    parsed_data.add_rows(rows);
+
     Ok(parsed_data)
 }

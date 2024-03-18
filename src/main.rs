@@ -3,6 +3,7 @@ use zip::read::ZipArchive;
 
 mod models;
 mod parsers;
+mod time_utils;
 
 use crate::models::nem_current_rooftop_pv_actual::RooftopPvActualParsedData;
 use crate::parsers::generic_csv_parser::parse_csv;

@@ -1,28 +1,13 @@
 use crate::parsers::generic_csv_parser::ParsedData;
-use serde::{self, Deserialize, Deserializer};
-use chrono::{DateTime, NaiveDateTime, Utc};
-use chrono_tz::Australia::Sydney; // automatically adjusts for DST
-use serde::de::Error;
-use chrono::TimeZone;
+use chrono::{DateTime, Utc};
+use serde::{self, Deserialize};
 use std::fmt;
 
-const DATE_FORMAT_FROM: &str = "%Y/%m/%d %H:%M:%S";
-
-fn deserialize_sydney_date_to_utc<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    let naive = NaiveDateTime::parse_from_str(&s, DATE_FORMAT_FROM)
-        .map_err(D::Error::custom)?;
-    let sydney_date = Sydney.from_local_datetime(&naive).single().ok_or_else(|| D::Error::custom("Invalid Sydney date/time"))?;
-    Ok(sydney_date.with_timezone(&Utc))
-}
+use crate::time_utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
 
 #[derive(Debug)]
 pub struct RooftopPvActualParsedData {
-    information_rows: Vec<RooftopPvActualInformationRow>,
-    data_rows: Vec<RooftopPvActualDataRow>,
+    rows: Vec<(RooftopPvActualInformationRow, Vec<RooftopPvActualDataRow>)>,
 }
 
 impl ParsedData for RooftopPvActualParsedData {
@@ -30,21 +15,13 @@ impl ParsedData for RooftopPvActualParsedData {
     type DataRow = RooftopPvActualDataRow;
 
     fn new() -> Self {
-        RooftopPvActualParsedData {
-            information_rows: Vec::new(),
-            data_rows: Vec::new(),
-        }
+        RooftopPvActualParsedData { rows: Vec::new() }
     }
 
-    fn add_information_row(&mut self, row: Self::InformationRow) {
-        self.information_rows.push(row);
-    }
-
-    fn add_data_row(&mut self, row: Self::DataRow) {
-        self.data_rows.push(row);
+    fn add_rows(&mut self, rows: Vec<(Self::InformationRow, Vec<Self::DataRow>)>) {
+        self.rows.extend(rows);
     }
 }
-
 // Define the structs for information and data rows
 // Updated struct to represent the Information row (I row)
 #[derive(Debug, Deserialize)]
@@ -104,7 +81,7 @@ pub struct RooftopPvActualDataRow {
     #[serde(rename = "REPORT_TYPE_INT")]
     report_type_int: String,
     #[serde(rename = "INTERVAL_DATETIMEZONE")]
-    #[serde(deserialize_with = "deserialize_sydney_date_to_utc")]
+    #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
     interval_datetime: DateTime<Utc>, // Adjusted to use DateTimeWithTimeZone
     #[serde(rename = "REGIONID")]
     regionid: String,
@@ -141,14 +118,13 @@ impl fmt::Display for RooftopPvActualDataRow {
 impl fmt::Display for RooftopPvActualParsedData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "RooftopPvActualParsedData:\n")?;
-        for info_row in &self.information_rows {
+        for (info_row, data_rows) in &self.rows {
             // Utilize the Display implementation of RooftopPvActualInformationRow
             write!(f, "\t{}\n", info_row)?;
-        }
-
-        for data_row in &self.data_rows {
-            // Utilize the Display implementation of RooftopPvActualDataRow
-            write!(f, "\t{}\n", data_row)?;
+            for data_row in data_rows {
+                // Utilize the Display implementation of RooftopPvActualDataRow
+                write!(f, "\t\t{}\n", data_row)?;
+            }
         }
 
         Ok(())
