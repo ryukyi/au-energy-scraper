@@ -1,1 +1,1 @@
-pub mod rooftop_pv_parser;
+pub mod generic_csv_parser;
