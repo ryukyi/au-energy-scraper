@@ -3,25 +3,57 @@ use chrono::{DateTime, Utc};
 use serde::{self, Deserialize};
 use std::fmt;
 
+use crate::common::parser_types::{DataRowTrait, InformationRowTrait, RowAction, RowMatcher};
 use crate::time_utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
+
+#[derive(Debug)]
+pub struct RooftopPvActualMatcher;
+
+impl RowMatcher for RooftopPvActualMatcher {
+    fn match_row(&self, record: &csv::StringRecord) -> RowAction {
+        if record.get(0) == Some("I") && record.get(2) == Some("ACTUAL") {
+            RowAction::InformationRow
+        } else if record.get(0) == Some("D") {
+            RowAction::DataRow
+        } else if record.get(0) == Some("C")
+            && record.get(1).unwrap_or("").to_uppercase() == "END OF REPORT"
+        {
+            RowAction::ControlRow
+        } else {
+            RowAction::Ignore
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct RooftopPvActualParsedData {
     rows: Vec<(RooftopPvActualInformationRow, Vec<RooftopPvActualDataRow>)>,
+    matcher: RooftopPvActualMatcher,
 }
 
 impl ParsedData for RooftopPvActualParsedData {
     type InformationRow = RooftopPvActualInformationRow;
     type DataRow = RooftopPvActualDataRow;
+    // Specify the type for Matcher
+    type Matcher = RooftopPvActualMatcher;
 
     fn new() -> Self {
-        RooftopPvActualParsedData { rows: Vec::new() }
+        RooftopPvActualParsedData {
+            rows: Vec::new(),
+            matcher: RooftopPvActualMatcher, // Initialize the matcher
+        }
     }
 
     fn add_rows(&mut self, rows: Vec<(Self::InformationRow, Vec<Self::DataRow>)>) {
         self.rows.extend(rows);
     }
+
+    // Implement the matcher function to return a reference to the matcher instance
+    fn matcher(&self) -> &Self::Matcher {
+        &self.matcher
+    }
 }
+
 // Define the structs for information and data rows
 // Updated struct to represent the Information row (I row)
 #[derive(Debug, Deserialize)]
@@ -48,6 +80,8 @@ pub struct RooftopPvActualInformationRow {
     #[serde(rename = "LASTCHANGED")]
     lastchanged: String,
 }
+
+impl InformationRowTrait for RooftopPvActualInformationRow {}
 
 impl fmt::Display for RooftopPvActualInformationRow {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -95,6 +129,8 @@ pub struct RooftopPvActualDataRow {
     lastchanged: String,
 }
 
+impl DataRowTrait for RooftopPvActualDataRow {}
+
 impl fmt::Display for RooftopPvActualDataRow {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Example implementation, adjust according to your needs
@@ -117,13 +153,13 @@ impl fmt::Display for RooftopPvActualDataRow {
 
 impl fmt::Display for RooftopPvActualParsedData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RooftopPvActualParsedData:\n")?;
+        writeln!(f, "RooftopPvActualParsedData:")?;
         for (info_row, data_rows) in &self.rows {
             // Utilize the Display implementation of RooftopPvActualInformationRow
-            write!(f, "\t{}\n", info_row)?;
+            writeln!(f, "\t{}", info_row)?;
             for data_row in data_rows {
                 // Utilize the Display implementation of RooftopPvActualDataRow
-                write!(f, "\t\t{}\n", data_row)?;
+                writeln!(f, "\t\t{}", data_row)?;
             }
         }
 
