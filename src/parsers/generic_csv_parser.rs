@@ -1,80 +1,70 @@
 use csv::{ReaderBuilder, Trim};
-use serde::Deserialize;
 use std::error::Error;
-use std::fmt;
 use std::io::Read;
 
-#[derive(Debug, Deserialize)]
-enum RowType {
-    #[serde(rename = "C")]
-    Control,
-    #[serde(rename = "I")]
-    Information,
-    #[serde(rename = "D")]
-    Data,
-}
+use crate::common::parser_types::{DataRowTrait, InformationRowTrait, RowAction, RowMatcher};
 
-#[derive(PartialEq, Eq)]
-enum ParseState {
-    Control,
-    Information,
-    Data,
-}
-
-pub trait ParsedData
-where
-    Self::InformationRow: for<'de> Deserialize<'de> + fmt::Debug + fmt::Display,
-    Self::DataRow: for<'de> Deserialize<'de> + fmt::Debug + fmt::Display,
-{
-    type InformationRow;
-    type DataRow;
+pub trait ParsedData {
+    type InformationRow: InformationRowTrait;
+    type DataRow: DataRowTrait;
+    type Matcher: RowMatcher;
 
     fn new() -> Self;
-    fn add_information_row(&mut self, row: Self::InformationRow);
-    fn add_data_row(&mut self, row: Self::DataRow);
+    fn add_rows(&mut self, rows: Vec<(Self::InformationRow, Vec<Self::DataRow>)>);
+    fn matcher(&self) -> &Self::Matcher;
 }
 
-pub fn parse_csv<R: Read, T: ParsedData>(reader: R) -> Result<T, Box<dyn Error>> {
-    let mut rdr = ReaderBuilder::new()
-        .trim(Trim::All)
-        .has_headers(false)
-        .flexible(true) // Allow rows with varying numbers of fields
-        .from_reader(reader);
+// Adjust the function to take a vector of tuples, each containing a reader and a mutable reference to its associated ParsedData
+pub fn parse_csv<R: Read, T: ParsedData>(readers: Vec<(R, &mut T)>) -> Result<(), Box<dyn Error>> {
+    for (reader, parsed_data) in readers {
+        let mut rdr = ReaderBuilder::new()
+            .trim(Trim::All)
+            .has_headers(false)
+            .flexible(true) // Allow rows with varying numbers of fields
+            .from_reader(reader);
 
-    let mut parsed_data = T::new();
-    let mut state = ParseState::Control;
-    for result in rdr.records() {
-        let record = result?;
-        let first_cell = record.get(0).unwrap_or("");
+        let mut rows: Vec<(T::InformationRow, Vec<T::DataRow>)> = Vec::new();
+        let mut current_data_rows: Vec<T::DataRow> = Vec::new();
+        let mut current_info_row: Option<T::InformationRow> = None;
 
-        match first_cell {
-            "I" => {
-                state = ParseState::Information;
-                let information_row: T::InformationRow = record.deserialize(None)?;
-                parsed_data.add_information_row(information_row);
-            }
-            "D" => {
-                state = ParseState::Data;
-                let data_row: T::DataRow = record.deserialize(None)?;
-                parsed_data.add_data_row(data_row);
-                // No need to change state, directly handling based on row type
-            }
-            "C" => {
-                if state == ParseState::Data
-                    && record.get(1).unwrap_or("").to_uppercase() == "END OF REPORT"
-                {
-                    break;
+        for result in rdr.records() {
+            let record = result?;
+            let action = parsed_data.matcher().match_row(&record);
+
+            match action {
+                RowAction::InformationRow => {
+                    if let Ok(info_row) = record.deserialize::<T::InformationRow>(None) {
+                        if let Some(current_info) = current_info_row.take() {
+                            rows.push((current_info, std::mem::take(&mut current_data_rows)));
+                        }
+                        current_info_row = Some(info_row);
+                    } else {
+                        // Handle deserialization error
+                    }
                 }
-                continue;
-            }
-            _ => {
-                // Handle unexpected row types
-                return Err(From::from(format!(
-                    "Unexpected row type or transition: {}",
-                    first_cell
-                )));
+                RowAction::DataRow => {
+                    if let Ok(data_row) = record.deserialize::<T::DataRow>(None) {
+                        current_data_rows.push(data_row);
+                    } else {
+                        // Handle deserialization error
+                    }
+                }
+                RowAction::ControlRow => {
+                    if record.get(1).unwrap_or("").to_uppercase() == "END OF REPORT" {
+                        if let Some(current_info) = current_info_row.take() {
+                            rows.push((current_info, std::mem::take(&mut current_data_rows)));
+                        }
+                        break;
+                    }
+                }
+                RowAction::Ignore => {
+                    // Ignore this row
+                }
             }
         }
+
+        parsed_data.add_rows(rows);
     }
-    Ok(parsed_data)
+
+    Ok(())
 }
