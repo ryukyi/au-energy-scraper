@@ -6,7 +6,7 @@ use std::fmt;
 use std::io::{BufRead, BufReader};
 
 use crate::common::parser_types::ProcessRecord;
-use crate::time_utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
+use crate::utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
 
 // Updated struct to represent the Data row (D row)
 #[derive(Debug, Deserialize)]
@@ -62,7 +62,9 @@ pub enum RecordCurrentRooftopPvActual {
 impl fmt::Display for RecordCurrentRooftopPvActual {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RecordCurrentRooftopPvActual::Variant1(interconnector_data) => write!(f, "{}", interconnector_data),
+            RecordCurrentRooftopPvActual::Variant1(interconnector_data) => {
+                write!(f, "{}", interconnector_data)
+            }
         }
     }
 }
@@ -79,7 +81,6 @@ impl ProcessRecord<RecordCurrentRooftopPvActual> for RooftopPvActualData {
         Ok(RecordCurrentRooftopPvActual::Variant1(record))
     }
 }
-
 
 pub fn process_file_current_rooftop_actual(
     contents: String,

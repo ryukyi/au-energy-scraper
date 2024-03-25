@@ -1,27 +1,26 @@
 use std::error::Error;
-use std::fs::{File, metadata};
-use std::time::Instant;
+use std::fmt;
+use std::fs::{metadata, File};
 use std::io::Read;
 use std::path::Path;
-use std::fmt;
+use std::time::Instant;
 use zip::ZipArchive;
 
 pub trait ProcessRecord<T> {
     fn process(line: &str) -> Result<T, Box<dyn Error>>;
 }
 
-/// A generic collection of records with potential for additional metadata.
+/// A generic collection of records with metadata.
 #[derive(Debug)]
 pub struct RecordsCollection<T> {
     pub records: Vec<T>,
     pub source_file: Option<String>,
     pub processing_time_ms: Option<u128>,
-    pub zipfile_size_bytes: Option<u64>, // New field for zipfile size in bytes
-    pub number_of_files: Option<usize>, // New field for the number of files in the zipfile
+    pub zipfile_size_bytes: Option<u64>,
+    pub number_of_files: Option<usize>,
 }
 
 impl<T> RecordsCollection<T> {
-    /// Creates a new, empty `RecordsCollection`.
     pub fn new() -> Self {
         RecordsCollection {
             records: Vec::new(),
@@ -61,7 +60,11 @@ impl<T> RecordsCollection<T> {
 impl<T: fmt::Display> fmt::Display for RecordsCollection<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Records Collection:")?;
-        writeln!(f, "Source File: {:?}", self.source_file.as_ref().unwrap_or(&"None".to_string()))?;
+        writeln!(
+            f,
+            "Source File: {:?}",
+            self.source_file.as_ref().unwrap_or(&"None".to_string())
+        )?;
         writeln!(f, "Processing Time (ms): {:?}", self.processing_time_ms)?;
         writeln!(f, "Zipfile Size (bytes): {:?}", self.zipfile_size_bytes)?;
         writeln!(f, "Number of Files: {:?}", self.number_of_files)?;
@@ -74,7 +77,10 @@ impl<T: fmt::Display> fmt::Display for RecordsCollection<T> {
     }
 }
 
-pub fn unzip_and_process<P, F, T>(file_path: P, processor: F) -> Result<RecordsCollection<T>, Box<dyn Error>>
+pub fn unzip_and_process<P, F, T>(
+    file_path: P,
+    processor: F,
+) -> Result<RecordsCollection<T>, Box<dyn Error>>
 where
     P: AsRef<Path>,
     F: Fn(&str) -> Result<Vec<T>, Box<dyn Error>>,
@@ -105,7 +111,7 @@ where
             Ok(result) => {
                 println!("Successfully processed {}", file_name);
                 collection.add_records(result);
-            },
+            }
             Err(e) => println!("Error processing {}: {}", file_name, e),
         }
     }
