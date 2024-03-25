@@ -6,7 +6,7 @@ use std::fmt;
 use std::io::{BufRead, BufReader};
 
 use crate::common::parser_types::ProcessRecord;
-use crate::time_utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
+use crate::utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct InterconnectorData {
@@ -19,7 +19,7 @@ pub struct InterconnectorData {
     #[serde(rename = "FILE_DESCRIPTOR")]
     report_type_int: String,
     #[serde(rename = "SETTLEMENTDATE")]
-    #[serde(deserialize_with="deserialize_sydney_datetime_to_utc")]
+    #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
     settlement_date: DateTime<Utc>,
     #[serde(rename = "RUNNO")]
     run_no: Option<u32>,
@@ -57,7 +57,7 @@ pub struct PriceData {
     #[serde(rename = "FILE_DESCRIPTOR")]
     report_type_int: String,
     #[serde(rename = "SETTLEMENT_DATE")]
-    #[serde(deserialize_with="deserialize_sydney_datetime_to_utc")]
+    #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
     settlement_date: DateTime<Utc>,
     #[serde(rename = "RUN_NO")]
     run_no: Option<u32>,
@@ -72,7 +72,7 @@ pub struct PriceData {
     #[serde(rename = "INVALID_FLAG")]
     invalid_flag: Option<u32>,
     #[serde(rename = "LAST_CHANGED")]
-    #[serde(deserialize_with="deserialize_sydney_datetime_to_utc")]
+    #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
     last_changed: DateTime<Utc>,
     #[serde(rename = "ROP")]
     rop: Option<f64>,
@@ -172,7 +172,9 @@ pub enum RecordCurrentTradingIs {
 impl fmt::Display for RecordCurrentTradingIs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RecordCurrentTradingIs::Variant1(interconnector_data) => write!(f, "{}", interconnector_data),
+            RecordCurrentTradingIs::Variant1(interconnector_data) => {
+                write!(f, "{}", interconnector_data)
+            }
             RecordCurrentTradingIs::Variant2(price_data) => write!(f, "{}", price_data),
         }
     }
