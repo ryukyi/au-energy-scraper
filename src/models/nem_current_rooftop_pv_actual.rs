@@ -22,17 +22,18 @@ pub struct RooftopPvActualData {
     report_type_int: String,
     #[serde(rename = "INTERVAL_DATETIMEZONE")]
     #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
-    interval_datetime: DateTime<Utc>, // Adjusted to use DateTimeWithTimeZone
+    interval_datetime: DateTime<Utc>,
     #[serde(rename = "REGIONID")]
     regionid: String,
     #[serde(rename = "POWER")]
-    power: f64, // Assuming power can be a floating-point number
+    power: Option<f64>, // Assuming power can be a floating-point number
     #[serde(rename = "QI")]
-    qi: u32,
+    qi: Option<f64>,
     #[serde(rename = "TYPE")]
     type_: String,
     #[serde(rename = "LASTCHANGED")]
-    lastchanged: String,
+    #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
+    lastchanged: DateTime<Utc>,
 }
 
 impl fmt::Display for RooftopPvActualData {
