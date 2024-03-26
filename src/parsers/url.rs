@@ -6,9 +6,9 @@ use std::str::FromStr;
 // Define a custom error type for parsing errors
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
-    UrlPathBadFormat,
-    NotZipFileName,
-    UniqueKeyNotNumber,
+    UrlPathBadFormat(String),
+    NotZipFileName(String),
+    UniqueKeyNotNumber(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -18,8 +18,18 @@ impl FromStr for UrlPath {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() || !s.starts_with('/') || s.ends_with(".zip") {
-            Err(ParseError::UrlPathBadFormat)
+        if s.is_empty() {
+            Err(ParseError::UrlPathBadFormat(
+                "URL path is empty.".to_string(),
+            ))
+        } else if !s.starts_with('/') {
+            Err(ParseError::UrlPathBadFormat(
+                "URL path does not start with '/'. ".to_string() + s,
+            ))
+        } else if s.ends_with(".zip") {
+            Err(ParseError::UrlPathBadFormat(
+                "URL path ends with '.zip'. ".to_string() + s,
+            ))
         } else {
             Ok(UrlPath(s.to_string()))
         }
@@ -33,8 +43,14 @@ impl FromStr for ZipFileName {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() || !s.ends_with(".zip") {
-            Err(ParseError::NotZipFileName)
+        if s.is_empty() {
+            Err(ParseError::NotZipFileName(
+                "ZipFileName is empty".to_string(),
+            ))
+        } else if !s.ends_with(".zip") {
+            Err(ParseError::NotZipFileName(
+                "ZipFileName doesn't end in .zip".to_string(),
+            ))
         } else {
             Ok(ZipFileName(s.to_string()))
         }
@@ -48,26 +64,27 @@ impl FromStr for UniqueKey {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<i64>()
-            .map_err(|_| ParseError::UniqueKeyNotNumber)?;
+        let _ = s
+            .parse::<i64>()
+            .map_err(|_| ParseError::UniqueKeyNotNumber("Unique Key is not a number".to_string()));
         Ok(UniqueKey(s.to_string()))
     }
 }
 
 #[derive(Debug)]
 pub enum ZipReportUrlParseError {
-    UrlPathBadFormat,
-    NotZipFileName,
+    UrlPathBadFormat(String),
+    NotZipFileName(String),
     DateTimeBadFormat,
-    UniqueKeyNotNumber,
+    UniqueKeyNotNumber(String),
 }
 
 impl From<ParseError> for ZipReportUrlParseError {
     fn from(err: ParseError) -> Self {
         match err {
-            ParseError::UrlPathBadFormat => ZipReportUrlParseError::UrlPathBadFormat,
-            ParseError::NotZipFileName => ZipReportUrlParseError::NotZipFileName,
-            ParseError::UniqueKeyNotNumber => ZipReportUrlParseError::UniqueKeyNotNumber,
+            ParseError::UrlPathBadFormat(msg) => ZipReportUrlParseError::UrlPathBadFormat(msg),
+            ParseError::NotZipFileName(msg) => ZipReportUrlParseError::NotZipFileName(msg),
+            ParseError::UniqueKeyNotNumber(msg) => ZipReportUrlParseError::UniqueKeyNotNumber(msg),
         }
     }
 }
@@ -91,18 +108,22 @@ impl ZipReportUrlPath {
         let path = Path::new(report_path);
         let file_name = path
             .file_name()
-            .ok_or(ZipReportUrlParseError::NotZipFileName)?
+            .ok_or_else(|| {
+                ZipReportUrlParseError::NotZipFileName("Expected a zip file name".to_string())
+            })?
             .to_str()
-            .ok_or(ZipReportUrlParseError::NotZipFileName)?;
+            .ok_or_else(|| {
+                ZipReportUrlParseError::NotZipFileName("Expected a zip file name".to_string())
+            })?;
 
         let url_path_end = report_path.rfind(file_name).unwrap_or(0);
         let url_path = &report_path[..url_path_end];
 
         let without_extension = file_name.trim_end_matches(".zip");
         let parts: Vec<&str> = without_extension.rsplitn(3, '_').collect();
-        let unique_key = parts
-            .first()
-            .ok_or(ZipReportUrlParseError::UniqueKeyNotNumber)?;
+        let unique_key = parts.first().ok_or_else(|| {
+            ZipReportUrlParseError::UniqueKeyNotNumber("Unique Key is not a number".to_string())
+        })?;
         let datetime_str = parts
             .get(1)
             .ok_or(ZipReportUrlParseError::DateTimeBadFormat)?;

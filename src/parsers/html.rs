@@ -23,7 +23,7 @@ impl ZipLinkExtractorFromHtml {
 
 #[cfg(test)]
 mod tests {
-    use super::*; // Import everything from the outer module
+    use super::*;
     use std::fs::File;
     use std::io::Read;
     use std::path::Path;
