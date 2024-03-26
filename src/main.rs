@@ -4,17 +4,18 @@ use std::error::Error;
 mod common;
 mod http_requests;
 mod models;
-mod utils;
+mod parsers;
+mod time;
 
-use crate::common::parser_types::{unzip_and_process, unzip_and_process_from_url};
-use crate::http_requests::nemweb::fetch_html_content;
+use crate::common::unzip_process::{unzip_and_process, unzip_and_process_from_url};
+use crate::http_requests::html::fetch_html_content;
 use crate::models::{
     nem_current_rooftop_pv_actual::process_file_current_rooftop_actual,
     nem_current_tradingis_report::process_file_current_trading_is,
 };
-use crate::utils::html_parse::ZipLinkExtractor;
-use crate::utils::time_ranges::{Interval, TimestampGenerator};
-use crate::utils::url_parse::ParsedReport;
+use crate::parsers::html::ZipLinkExtractorFromHtml;
+use crate::parsers::url::ZipReportUrlPath;
+use crate::time::time_ranges::{Interval, TimestampGenerator};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -79,14 +80,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let sample_href =
         "/Reports/Current/TradingIS_Reports/PUBLIC_TRADINGIS_202403120535_0000000413460134.zip";
-    let result = ParsedReport::parse_report_path(sample_href).expect("Failed to parse report path");
+    let result =
+        ZipReportUrlPath::parse_report_path(sample_href).expect("Failed to parse report path");
     println!("{}", result);
 
+    let base_url = "http://nemweb.com.au";
     let path = "/Reports/Current/ROOFTOP_PV/ACTUAL/";
     let user_agent = "rooftop-app/0.1";
-    let url_paths = match fetch_html_content(path, user_agent).await {
+    let url_paths = match fetch_html_content(base_url, path, user_agent).await {
         Ok(html_content) => {
-            let extractor = ZipLinkExtractor::new();
+            let extractor = ZipLinkExtractorFromHtml::new();
             extractor.extract_links(&html_content)
         }
         Err(e) => {
@@ -95,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     for url_path in url_paths {
-        let result = unzip_and_process_from_url(&url_path, |contents: &str| {
+        let result = unzip_and_process_from_url(base_url, &url_path, |contents: &str| {
             process_file_current_rooftop_actual(contents.as_bytes())
         })
         .await?;

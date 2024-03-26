@@ -5,8 +5,8 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufRead, BufReader};
 
-use crate::common::parser_types::ProcessRecord;
-use crate::utils::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
+use crate::common::unzip_process::ProcessRecord;
+use crate::time::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
 
 // Updated struct to represent the Data row (D row)
 #[derive(Debug, Deserialize)]

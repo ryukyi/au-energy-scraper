@@ -125,9 +125,8 @@ where
     Ok(collection)
 }
 
-const BASE_URL: &str = "http://nemweb.com.au";
-
 pub async fn unzip_and_process_from_url<F, T>(
+    base_url: &str,
     path: &str,
     processor: F,
 ) -> Result<RecordsCollection<T>, Box<dyn Error>>
@@ -135,8 +134,8 @@ where
     F: Fn(&str) -> Result<Vec<T>, Box<dyn Error>> + Send + Sync + 'static,
     T: 'static + Display + Send + Sync,
 {
-    let url = format!("{}{}", BASE_URL, path);
     let start_time = Instant::now();
+    let url = format!("{}{}", base_url, path);
 
     // Fetch the zip file from the URL
     let response = reqwest::get(url).await?;

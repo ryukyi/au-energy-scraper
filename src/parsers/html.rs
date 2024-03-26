@@ -1,12 +1,12 @@
 use regex::Regex;
 
-pub struct ZipLinkExtractor {
+pub struct ZipLinkExtractorFromHtml {
     pattern: Regex,
 }
 
-impl ZipLinkExtractor {
+impl ZipLinkExtractorFromHtml {
     pub fn new() -> Self {
-        ZipLinkExtractor {
+        ZipLinkExtractorFromHtml {
             // Only keep links ending in zip
             pattern: Regex::new(r#"HREF="([^"]*\.zip)""#).unwrap(),
         }
@@ -30,7 +30,7 @@ mod tests {
 
     #[test]
     fn test_extract_links_from_tradingis_html() {
-        let extractor = ZipLinkExtractor::new();
+        let extractor = ZipLinkExtractorFromHtml::new();
         let mut file =
             File::open(Path::new("src/fixtures/TradingIs.html")).expect("Failed to open HTML file");
         let mut html_content = String::new();
