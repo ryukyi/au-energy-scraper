@@ -1,6 +1,9 @@
+use reqwest;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Display;
 use std::fs::{metadata, File};
+use std::io::Cursor;
 use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
@@ -105,6 +108,59 @@ where
         println!("Processing file: {}", file_name);
 
         let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        match processor(&contents) {
+            Ok(result) => {
+                println!("Successfully processed {}", file_name);
+                collection.add_records(result);
+            }
+            Err(e) => println!("Error processing {}: {}", file_name, e),
+        }
+    }
+
+    let processing_time = start_time.elapsed().as_millis();
+    collection.set_processing_time(processing_time);
+
+    Ok(collection)
+}
+
+const BASE_URL: &str = "http://nemweb.com.au";
+
+pub async fn unzip_and_process_from_url<F, T>(
+    path: &str,
+    processor: F,
+) -> Result<RecordsCollection<T>, Box<dyn Error>>
+where
+    F: Fn(&str) -> Result<Vec<T>, Box<dyn Error>> + Send + Sync + 'static,
+    T: 'static + Display + Send + Sync,
+{
+    let url = format!("{}{}", BASE_URL, path);
+    let start_time = Instant::now();
+
+    // Fetch the zip file from the URL
+    let response = reqwest::get(url).await?;
+    let bytes = response.bytes().await?;
+    let zipfile_size = bytes.len() as u64;
+    // Create a ZipArchive from the bytes
+    let reader = Cursor::new(bytes);
+    let mut archive = ZipArchive::new(reader)?;
+
+    let number_of_files = archive.len();
+
+    let mut collection = RecordsCollection::<T>::new();
+    collection.set_source_file(path.to_string());
+    collection.set_zipfile_size(zipfile_size);
+    collection.set_number_of_files(number_of_files);
+
+    for i in 0..number_of_files {
+        let mut file = archive.by_index(i)?;
+        let file_name = file.name().to_string();
+
+        println!("Processing file: {}", file_name);
+
+        let mut contents = String::new();
+        // TODO: stream instead of reading all contents
         file.read_to_string(&mut contents)?;
 
         match processor(&contents) {

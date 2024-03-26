@@ -1,19 +1,18 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use std::error::Error;
-use tokio;
 
 mod common;
 mod http_requests;
 mod models;
 mod utils;
 
-use crate::common::parser_types::unzip_and_process;
-use crate::http_requests::rooftop_pv::fetch_html_content_with_options;
+use crate::common::parser_types::{unzip_and_process, unzip_and_process_from_url};
+use crate::http_requests::nemweb::fetch_html_content;
 use crate::models::{
     nem_current_rooftop_pv_actual::process_file_current_rooftop_actual,
     nem_current_tradingis_report::process_file_current_trading_is,
 };
-use crate::utils::html_parse::LinkExtractor;
+use crate::utils::html_parse::ZipLinkExtractor;
 use crate::utils::time_ranges::{Interval, TimestampGenerator};
 use crate::utils::url_parse::ParsedReport;
 
@@ -36,7 +35,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let path =
         "src/fixtures/PUBLIC_ROOFTOP_PV_ACTUAL_MEASUREMENT_20240303200000_0000000412707330.zip";
     let result = unzip_and_process(path, |contents: &str| {
-        process_file_current_rooftop_actual(contents.to_string())
+        process_file_current_rooftop_actual(contents.as_bytes())
     });
     match result {
         Ok(records) => {
@@ -50,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let path = "src/fixtures/PUBLIC_DVD_ROOFTOP_PV_ACTUAL_201912010000.zip";
     let result = unzip_and_process(path, |contents: &str| {
-        process_file_current_rooftop_actual(contents.to_string())
+        process_file_current_rooftop_actual(contents.as_bytes())
     });
     match result {
         Ok(records) => {
@@ -85,9 +84,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let path = "/Reports/Current/ROOFTOP_PV/ACTUAL/";
     let user_agent = "rooftop-app/0.1";
-    let urls = match fetch_html_content_with_options(path, user_agent).await {
+    let url_paths = match fetch_html_content(path, user_agent).await {
         Ok(html_content) => {
-            let extractor = LinkExtractor::new();
+            let extractor = ZipLinkExtractor::new();
             extractor.extract_links(&html_content)
         }
         Err(e) => {
@@ -95,8 +94,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Vec::new()
         }
     };
-
-    println!("{:?}", urls);
+    for url_path in url_paths {
+        let result = unzip_and_process_from_url(&url_path, |contents: &str| {
+            process_file_current_rooftop_actual(contents.as_bytes())
+        })
+        .await?;
+        println!("{}", result);
+    }
 
     Ok(())
 }

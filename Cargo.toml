@@ -15,3 +15,4 @@ chrono-tz = "0.8.6"
 regex = "1.10.4"
 tokio = {version = "1.36.0", features = ["full"]}
 reqwest = {version = "0.12.2", features = ["json"]}
+bytes = "1.6.0"

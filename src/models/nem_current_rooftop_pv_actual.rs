@@ -84,11 +84,9 @@ impl ProcessRecord<RecordCurrentRooftopPvActual> for RooftopPvActualData {
 }
 
 pub fn process_file_current_rooftop_actual(
-    contents: String,
+    contents: &[u8],
 ) -> Result<Vec<RecordCurrentRooftopPvActual>, Box<dyn Error>> {
-    // Convert the contents string to byte data
-    let byte_data = contents.as_bytes();
-    let reader = BufReader::new(byte_data);
+    let reader = BufReader::new(contents);
     let mut records: Vec<RecordCurrentRooftopPvActual> = Vec::new();
 
     for line_result in reader.lines() {

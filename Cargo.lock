@@ -56,6 +56,7 @@ dependencies = [
 name = "au-energy-scraper"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "chrono-tz",
  "csv",

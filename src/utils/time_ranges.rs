@@ -67,8 +67,7 @@ impl TimestampGenerator {
             + self.start_date.second() as i64)
             % interval_seconds;
         if start_adjustment != 0 {
-            self.start_date = self.start_date
-                - Duration::try_seconds(start_adjustment)
+            self.start_date -= Duration::try_seconds(start_adjustment)
                     .expect("Couldn't subtract seconds from start date");
         }
     }
