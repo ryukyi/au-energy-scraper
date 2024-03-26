@@ -1,18 +1,18 @@
 use regex::Regex;
 
-struct LinkExtractor {
+pub struct LinkExtractor {
     pattern: Regex,
 }
 
 impl LinkExtractor {
-    fn new() -> Self {
+    pub fn new() -> Self {
         LinkExtractor {
             // Only keep links ending in zip
-            pattern: Regex::new(r#"href="([^"]*\.zip)""#).unwrap(),
+            pattern: Regex::new(r#"HREF="([^"]*\.zip)""#).unwrap(),
         }
     }
 
-    fn extract_links(&self, html: &str) -> Vec<String> {
+    pub fn extract_links(&self, html: &str) -> Vec<String> {
         self.pattern
             .captures_iter(html)
             .filter_map(|cap| cap.get(1))
