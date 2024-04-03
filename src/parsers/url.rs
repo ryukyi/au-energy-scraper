@@ -122,7 +122,7 @@ impl ZipReportUrlPath {
         let without_extension = file_name.trim_end_matches(".zip");
         let parts: Vec<&str> = without_extension.rsplitn(3, '_').collect();
         let unique_key = parts.first().ok_or_else(|| {
-            ZipReportUrlParseError::UniqueKeyNotNumber("Unique Key is not a number".to_string())
+            ZipReportUrlParseError::UniqueKeyNotNumber("Unique Key first part is empty".to_string())
         })?;
         let datetime_str = parts
             .get(1)
