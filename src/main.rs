@@ -1,5 +1,5 @@
-use chrono::{NaiveDate, NaiveDateTime};
 use std::error::Error;
+use std::fs;
 
 mod common;
 mod http_requests;
@@ -7,83 +7,31 @@ mod models;
 mod parsers;
 mod time;
 
-use crate::common::unzip_process::{unzip_and_process, unzip_and_process_from_url};
+use crate::common::processor::{unzip_and_process, unzip_and_process_from_url, RecordType, ProcessRecord};
 use crate::http_requests::html::fetch_html_content;
-use crate::models::{
-    nem_current_rooftop_pv_actual::process_file_current_rooftop_actual,
-    nem_current_tradingis_report::process_file_current_trading_is,
-};
 use crate::parsers::html::ZipLinkExtractorFromHtml;
-use crate::parsers::url::ZipReportUrlPath;
-use crate::time::time_ranges::{Interval, TimestampGenerator};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let path = "src/fixtures/PUBLIC_TRADINGIS_202403031335_0000000412683134.zip";
-    let result = unzip_and_process(path, |contents: &str| {
-        process_file_current_trading_is(contents.to_string())
-    });
-    match result {
-        Ok(records) => {
-            print!("{}", &records)
-        }
-        Err(e) => {
-            println!("Error processing file: {:?}", e);
-            return Err(e);
-        }
-    }
 
-    let path =
-        "src/fixtures/PUBLIC_ROOFTOP_PV_ACTUAL_MEASUREMENT_20240303200000_0000000412707330.zip";
-    let result = unzip_and_process(path, |contents: &str| {
-        process_file_current_rooftop_actual(contents.as_bytes())
-    });
-    match result {
-        Ok(records) => {
-            print!("{}", &records)
-        }
-        Err(e) => {
-            println!("Error processing file: {:?}", e);
-            return Err(e);
-        }
-    }
+    // Example unzipping a filepath
+    let file_path = "src/fixtures/PUBLIC_ROOFTOP_PV_ACTUAL_MEASUREMENT_20240303200000_0000000412707330.zip";
 
-    let path = "src/fixtures/PUBLIC_DVD_ROOFTOP_PV_ACTUAL_201912010000.zip";
-    let result = unzip_and_process(path, |contents: &str| {
-        process_file_current_rooftop_actual(contents.as_bytes())
-    });
-    match result {
-        Ok(records) => {
-            print!("{}", &records)
-        }
-        Err(e) => {
-            println!("Error processing file: {:?}", e);
-            return Err(e);
-        }
-    }
+    // Read the zip file into bytes
+    let zip_bytes = fs::read(file_path)?;
 
-    let start_date: NaiveDateTime = NaiveDate::from_ymd_opt(2024, 3, 8)
-        .expect("Start date is invalid")
-        .and_hms_opt(7, 50, 0)
-        .expect("Start date hours minutes seconds not valid");
-    let end_date: NaiveDateTime = NaiveDate::from_ymd_opt(2024, 3, 8)
-        .expect("End date is invalid")
-        .and_hms_opt(10, 31, 0)
-        .expect("End date hours minutes seconds not valid");
+    let collection = unzip_and_process(&zip_bytes, |contents| {
+        contents
+            .lines()
+            // TODO: process and retain header and file info. Starts_with 'C' and 'I' 
+            .filter(|line| line.starts_with('D')) // Skip header and metadata lines
+            .map(RecordType::process)
+            .collect::<Result<Vec<RecordType>, Box<dyn Error>>>()
+    })?;
+    println!("{}", collection);
 
-    let generator = TimestampGenerator::new(start_date, end_date, Interval::FiveMinutes);
 
-    let timestamps = generator.generate();
-    for timestamp in timestamps {
-        println!("{}", timestamp);
-    }
-
-    let sample_href =
-        "/Reports/Current/TradingIS_Reports/PUBLIC_TRADINGIS_202403120535_0000000413460134.zip";
-    let result =
-        ZipReportUrlPath::parse_report_path(sample_href).expect("Failed to parse report path");
-    println!("{}", result);
-
+    // Example requesting from url and iterating over, parsing each zip file
     let base_url = "http://nemweb.com.au";
     let path = "/Reports/Current/ROOFTOP_PV/ACTUAL/";
     let user_agent = "rooftop-app/0.1";
@@ -97,12 +45,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Vec::new()
         }
     };
-    for url_path in url_paths {
-        let result = unzip_and_process_from_url(base_url, &url_path, |contents: &str| {
-            process_file_current_rooftop_actual(contents.as_bytes())
-        })
-        .await?;
-        println!("{}", result);
+    for path in url_paths {
+        let url_collection = unzip_and_process_from_url(base_url, &path, |contents| {
+            contents
+                .lines()
+                .filter(|line| line.starts_with('D')) // Skip header and metadata lines
+                .map(RecordType::process)
+                .collect::<Result<Vec<RecordType>, Box<dyn Error>>>()
+        }).await?;
+        println!("{:?}", url_collection);
     }
 
     Ok(())

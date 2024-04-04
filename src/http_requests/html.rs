@@ -7,7 +7,6 @@ use std::time::Duration;
 pub enum HttpError {
     Reqwest(ReqwestError),
     Io(IoError),
-    MimeType(String),
 }
 
 impl From<ReqwestError> for HttpError {
@@ -22,22 +21,19 @@ impl From<IoError> for HttpError {
     }
 }
 
-// Define an asynchronous function to fetch HTML content with additional parameters
+// Fetch HTML content with additional parameters
 pub async fn fetch_html_content(
     base_url: &str,
     path: &str,
     user_agent: &str,
 ) -> Result<String, ReqwestError> {
-    // Combine the base URL with the provided path
     let url = format!("{}{}", base_url, path);
 
-    // Create a client with a custom user agent and timeout
     let client = Client::builder()
         .user_agent(user_agent)
         .timeout(Duration::from_secs(10))
         .build()?;
 
-    // Perform the GET request
     let response = client.get(&url).send().await?;
 
     if response.status().is_success() {
