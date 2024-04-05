@@ -91,6 +91,12 @@ impl RecordTypeStartsWith for RooftopPvActual {
 pub struct RooftopPvForecast {
     #[serde(rename = "CSVROWIDENTIFIER")]
     csv_row_identifier: String, // "D"
+    #[serde(rename = "CATEGORY")]
+    category: String,
+    #[serde(rename = "REPORT_TYPE")]
+    report_type: String,
+    #[serde(rename = "REPORT_TYPE_INT")]
+    report_type_int: String,
     #[serde(rename = "VERSION_DATETIME")]
     #[serde(deserialize_with = "deserialize_sydney_datetime_to_utc")]
     version_datetime: DateTime<Utc>,
@@ -114,8 +120,11 @@ pub struct RooftopPvForecast {
 
 impl fmt::Display for RooftopPvForecast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "RooftopPvForecastData: {{ csv_row_identifier: {:?}, version_datetime: {:?}, regionid: {:?}, interval_datetime: {:?}, power_mean: {:?}, power_poe50: {:?}, power_poelow: {:?}, power_poehigh: {:?}, lastchanged: {:?} }}",
+        write!(f, "RooftopPvForecastData: {{ csv_row_identifier: {:?}, category: {:?}, report_type: {:?}, report_type_int: {:?}, version_datetime: {:?}, regionid: {:?}, interval_datetime: {:?}, power_mean: {:?}, power_poe50: {:?}, power_poelow: {:?}, power_poehigh: {:?}, lastchanged: {:?} }}",
             self.csv_row_identifier,
+            self.category,
+            self.report_type,
+            self.report_type_int,
             self.version_datetime,
             self.regionid,
             self.interval_datetime,

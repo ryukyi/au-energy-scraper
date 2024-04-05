@@ -9,7 +9,7 @@ use reqwest;
 use zip::ZipArchive;
 
 use crate::models::{
-    nem_current_rooftop_pv::RooftopPvActual,
+    nem_current_rooftop_pv::{RooftopPvActual, RooftopPvForecast},
     nem_current_tradingis_reports::{Price, Interconnector},
 };
 use crate::common::record_deserializer::deserialize_record;
@@ -23,7 +23,9 @@ pub trait RecordTypeStartsWith {
 pub enum RecordType {
     Interconnector(Interconnector),
     Price(Price),
-    RooftopPvActual(RooftopPvActual)
+    RooftopPvActual(RooftopPvActual),
+    RooftopPvForecast(RooftopPvForecast)
+
 }
 
 impl fmt::Display for RecordType {
@@ -32,6 +34,8 @@ impl fmt::Display for RecordType {
             RecordType::Interconnector(data) => write!(f, "{}", data),
             RecordType::Price(data) => write!(f, "{}", data),
             RecordType::RooftopPvActual(data) => write!(f, "{}", data),
+            RecordType::RooftopPvForecast(data) => write!(f, "{}", data),
+
         }
     }
 }
@@ -52,6 +56,9 @@ impl ProcessRecord for RecordType {
         } else if RooftopPvActual::matches(line) {
             let record = deserialize_record::<RooftopPvActual>(line)?;
             Ok(RecordType::RooftopPvActual(record))
+        } else if RooftopPvForecast::matches(line) {
+            let record = deserialize_record::<RooftopPvForecast>(line)?;
+            Ok(RecordType::RooftopPvForecast(record))
         } else {
             // Add more cases as needed
             Err("Unknown record type".into())
