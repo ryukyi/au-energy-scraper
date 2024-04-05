@@ -7,7 +7,7 @@ mod models;
 mod parsers;
 mod time;
 
-use crate::common::processor::{unzip_and_process, unzip_and_process_from_url, RecordType, ProcessRecord};
+use crate::common::processor::{unzip_and_process, unzip_and_process_from_url, RecordType};
 use crate::http_requests::html::fetch_html_content;
 use crate::parsers::html::ZipLinkExtractorFromHtml;
 
@@ -15,19 +15,16 @@ use crate::parsers::html::ZipLinkExtractorFromHtml;
 async fn main() -> Result<(), Box<dyn Error>> {
 
     // Example unzipping a filepath
+    // Example unzipping a file path
     let file_path = "src/fixtures/PUBLIC_ROOFTOP_PV_FORECAST_20240321203000_0000000414322812.zip";
 
     // Read the zip file into bytes
     let zip_bytes = fs::read(file_path)?;
 
-    let collection = unzip_and_process(&zip_bytes, |contents| {
-        contents
-            .lines()
-            // TODO: process and retain header and file info. Starts_with 'C' and 'I' 
-            .filter(|line| line.starts_with('D')) // Skip header and metadata lines
-            .map(RecordType::process)
-            .collect::<Result<Vec<RecordType>, Box<dyn Error>>>()
-    })?;
+    // Process the zip file's contents directly without passing a processor function
+    let collection = unzip_and_process(&zip_bytes)?;
+
+    // Print the resulting RecordsCollection
     println!("{}", collection);
 
 

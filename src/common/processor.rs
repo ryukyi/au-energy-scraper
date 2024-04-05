@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::io::Cursor;
-use std::io::Read;
 use std::time::Instant;
+use std::io::{BufRead, BufReader};
 
 use serde::Deserialize;
 use reqwest;
@@ -12,11 +13,12 @@ use crate::models::{
     nem_current_rooftop_pv::{RooftopPvActual, RooftopPvForecast},
     nem_current_tradingis_reports::{Price, Interconnector},
 };
-use crate::common::record_deserializer::deserialize_record;
+use crate::common::record_deserializer::{deserialize_record, DeserializeError};
 
 pub trait RecordTypeStartsWith {
     fn matches(line: &str) -> bool;
 }
+
 
 // Define the enum for record types
 #[derive(Debug, Deserialize)]
@@ -25,8 +27,39 @@ pub enum RecordType {
     Price(Price),
     RooftopPvActual(RooftopPvActual),
     RooftopPvForecast(RooftopPvForecast)
-
 }
+
+// Define the State enum based on the first 4 values of "I" rows
+#[derive(Debug, PartialEq, Eq, Hash)]
+enum State {
+    Interconnector,
+    Price,
+    RooftopPvActual,
+    RooftopPvForecast,
+}
+
+// Function to initialize and return the HashMap
+fn initialize_deserializers() -> HashMap<State, DeserializerFn> {
+    let mut deserializers: HashMap<State, DeserializerFn> = HashMap::new();
+    
+    deserializers.insert(State::Interconnector, |line| {
+        deserialize_record::<Interconnector>(line).map(RecordType::Interconnector)
+    });
+    deserializers.insert(State::Price, |line| {
+        deserialize_record::<Price>(line).map(RecordType::Price)
+    });
+    deserializers.insert(State::RooftopPvActual, |line| {
+        deserialize_record::<RooftopPvActual>(line).map(RecordType::RooftopPvActual)
+    });
+    deserializers.insert(State::RooftopPvForecast, |line| {
+        deserialize_record::<RooftopPvForecast>(line).map(RecordType::RooftopPvForecast)
+    });
+
+    deserializers
+}
+
+// Define a type alias for a deserialization function
+type DeserializerFn = fn(&str) -> Result<RecordType, DeserializeError>;
 
 impl fmt::Display for RecordType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -40,35 +73,96 @@ impl fmt::Display for RecordType {
     }
 }
 
-pub trait ProcessRecord {
-    fn process(line: &str) -> Result<RecordType, Box<dyn Error>>;
-}
+fn extract_identifier(line: &str) -> &str {
+    let mut commas = 0;
+    let mut end = 0;
 
-// All zip file types must be listed here
-impl ProcessRecord for RecordType {
-    fn process(line: &str) -> Result<RecordType, Box<dyn Error>> {
-        if Interconnector::matches(line) {
-            let record = deserialize_record::<Interconnector>(line)?;
-            Ok(RecordType::Interconnector(record))
-        } else if Price::matches(line) {
-            let record = deserialize_record::<Price>(line)?;
-            Ok(RecordType::Price(record))
-        } else if RooftopPvActual::matches(line) {
-            let record = deserialize_record::<RooftopPvActual>(line)?;
-            Ok(RecordType::RooftopPvActual(record))
-        } else if RooftopPvForecast::matches(line) {
-            let record = deserialize_record::<RooftopPvForecast>(line)?;
-            Ok(RecordType::RooftopPvForecast(record))
-        } else {
-            // Add more cases as needed
-            Err("Unknown record type".into())
+    for (index, char) in line.char_indices() {
+        if char == ',' {
+            commas += 1;
+            if commas == 4 {
+                end = index;
+                break;
+            }
         }
     }
+
+    // If less than 4 commas are found, return the whole line 
+    // otherwise, return up to the 4th comma
+    if commas < 4 { line } else { &line[..end] }
 }
+
+// Accepts an iterator so file is only read once
+fn process<I>(lines: I) -> Result<Vec<RecordType>, Box<dyn Error>>
+where
+    I: Iterator<Item = Result<String, std::io::Error>>,
+{
+    let deserializers = initialize_deserializers();
+    let mut current_state: Option<State> = None;
+    let mut records = Vec::new();
+
+    for line_result in lines {
+        let line = line_result?; // Handle the Result here
+        if line.starts_with('I') {
+            let identifier = extract_identifier(&line);
+            current_state = match identifier {
+                "I,TRADING,INTERCONNECTORRES,2" => Some(State::Interconnector),
+                "I,TRADING,PRICE,3" => Some(State::Price),
+                "I,ROOFTOP,ACTUAL,2" => Some(State::RooftopPvActual),
+                "I,ROOFTOP,FORECAST,1" => Some(State::RooftopPvForecast),
+                _ => None,
+            };
+        } else if line.starts_with('D') && current_state.is_some() {
+            if let Some(ref state) = current_state {
+                if let Some(deserializer) = deserializers.get(&state) {
+                    let record = deserializer(&line)?;
+                    records.push(record);
+                }
+            }
+        }
+    }
+
+    Ok(records)
+}
+
+
+pub fn unzip_and_process(
+    zip_bytes: &[u8],
+) -> Result<CsvRecordCollection, Box<dyn Error>> {
+    let start_time = Instant::now();
+    let reader = Cursor::new(zip_bytes);
+    let mut archive = ZipArchive::new(reader)?;
+
+    let number_of_files = archive.len();
+    let mut collection = CsvRecordCollection::new();
+    collection.set_zipfile_size(zip_bytes.len() as u64);
+    collection.set_number_of_files(number_of_files);
+
+    for i in 0..number_of_files {
+        let file = archive.by_index(i)?;
+        let file_name = file.name().to_string();
+
+        println!("Processing file: {}", file_name);
+
+        let file_reader = BufReader::new(file);
+        let lines_iter = file_reader.lines();
+
+        // Pass the iterator directly to process
+        let processed_records = process(lines_iter)?;
+        collection.add_records(processed_records);
+    }
+
+    let processing_time = start_time.elapsed().as_millis();
+    collection.set_processing_time(processing_time);
+
+    Ok(collection)
+}
+
+
 
 /// A generic collection of records with metadata.
 #[derive(Debug)]
-pub struct RecordsCollection {
+pub struct CsvRecordCollection {
     pub records: Vec<RecordType>,
     pub source_file: Option<String>,
     pub processing_time_ms: Option<u128>,
@@ -76,9 +170,9 @@ pub struct RecordsCollection {
     pub number_of_files: Option<usize>,
 }
 
-impl RecordsCollection {
+impl CsvRecordCollection {
     pub fn new() -> Self {
-        RecordsCollection {
+        CsvRecordCollection {
             records: Vec::new(),
             source_file: None,
             processing_time_ms: None,
@@ -108,7 +202,7 @@ impl RecordsCollection {
     }
 }
 
-impl fmt::Display for RecordsCollection {
+impl fmt::Display for CsvRecordCollection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Records Collection:")?;
         writeln!(
@@ -128,59 +222,22 @@ impl fmt::Display for RecordsCollection {
     }
 }
 
-// Updated unzip_and_process function signature
-// Adjusted unzip_and_process function to accept bytes
-pub fn unzip_and_process<F>(
-    zip_bytes: &[u8],
-    processor: F,
-) -> Result<RecordsCollection, Box<dyn Error>>
-where
-    F: Fn(&str) -> Result<Vec<RecordType>, Box<dyn Error>>,
-{
-    let start_time = Instant::now();
-    let reader = Cursor::new(zip_bytes);
-    let mut archive = ZipArchive::new(reader)?;
+// Assuming RecordsCollection and unzip_and_process are defined elsewhere in your code.
 
-    let number_of_files = archive.len();
-    let mut collection = RecordsCollection::new();
-    // Since we don't have a file path, adjust how source_file is set if needed
-    collection.set_zipfile_size(zip_bytes.len() as u64);
-    collection.set_number_of_files(number_of_files);
-
-    for i in 0..number_of_files {
-        let mut file = archive.by_index(i)?;
-        let file_name = file.name().to_string();
-
-        println!("Processing file: {}", file_name);
-
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-
-        match processor(&contents) {
-            Ok(result) => {
-                collection.add_records(result);
-                println!("Successfully processed {}", file_name);
-            }
-            Err(e) => println!("Error processing {}: {}", file_name, e),
-        }
-    }
-
-    let processing_time = start_time.elapsed().as_millis();
-    collection.set_processing_time(processing_time);
-
-    Ok(collection)
-}
-
-// Updated unzip_and_process_from_url function signature
-// Updated unzip_and_process_from_url function to use unzip_and_process with bytes
-pub async fn unzip_and_process_from_url<F>(
+/// Fetches a zip file from a URL and processes its contents.
+///
+/// # Arguments
+///
+/// * `base_url` - The base URL to fetch the zip file from.
+/// * `path` - The specific path to the zip file on the server.
+///
+/// # Returns
+///
+/// A result containing a `RecordsCollection` if successful, or an error if not.
+pub async fn unzip_and_process_from_url(
     base_url: &str,
     path: &str,
-    processor: F,
-) -> Result<RecordsCollection, Box<dyn Error>>
-where
-    F: Fn(&str) -> Result<Vec<RecordType>, Box<dyn Error>> + Send + Sync + 'static,
-{
+) -> Result<CsvRecordCollection, Box<dyn Error>> {
     let url = format!("{}{}", base_url, path);
 
     // Fetch the zip file from the URL
@@ -188,7 +245,7 @@ where
     let bytes = response.bytes().await?.to_vec(); // Convert Bytes to Vec<u8>
 
     // Directly pass the bytes to the adjusted unzip_and_process function
-    let result = unzip_and_process(&bytes, processor)?;
+    let result = unzip_and_process(&bytes)?;
 
     Ok(result)
 }
