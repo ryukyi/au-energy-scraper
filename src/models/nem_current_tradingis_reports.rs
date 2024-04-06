@@ -7,9 +7,9 @@
 //! <https://nemweb.com.au/Reports/Current/ROOFTOP_PV/ACTUAL/>.
 //!
 //! Structs and functions are to match:
-//! 
+//!
 //! ./au-energy-scraper/src/fixtures/PUBLIC_ROOFTOP_PV_ACTUAL_MEASUREMENT_20240303200000_0000000412707330.csv
-//! 
+//!
 //! ```text title="rooftop actual csv"
 //! C,NEMP.WORLD,ROOFTOP_PV_ACTUAL_MEASUREMENT,AEMO,PUBLIC,2024/03/03,20:00:03,0000000412707330,DEMAND,0000000412707330
 //! I,ROOFTOP,ACTUAL,2,INTERVAL_DATETIME,REGIONID,POWER,QI,TYPE,LASTCHANGED
@@ -26,13 +26,12 @@
 //! C,"END OF REPORT",13
 //! ```
 
-
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::fmt;
 
-use crate::time::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
 use crate::common::processor::RecordTypeStartsWith;
+use crate::time::datetimezone_conversion::deserialize_sydney_datetime_to_utc;
 #[derive(Debug, Deserialize, Default)]
 pub struct Interconnector {
     #[serde(rename = "ROW_TYPE")]

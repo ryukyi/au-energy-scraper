@@ -7,9 +7,9 @@
 //! <https://nemweb.com.au/Reports/Current/TradingIS_Reports/>.
 //!
 //! Structs and functions are to match below. Note multiple headers in the file.
-//! 
+//!
 //! ./au-energy-scraper/src/fixtures/PUBLIC_TRADINGIS_202403031335_0000000412683134.CSV
-//! 
+//!
 //! ```text title="TradingIS csv"
 //! C,NEMP.WORLD,TRADINGIS,AEMO,PUBLIC,2024/03/03,13:30:11,0000000412683134,TRADINGIS,0000000412683133
 //! I,TRADING,INTERCONNECTORRES,2,SETTLEMENTDATE,RUNNO,INTERCONNECTORID,PERIODID,METEREDMWFLOW,MWFLOW,MWLOSSES,LASTCHANGED
@@ -27,7 +27,6 @@
 //! D,TRADING,PRICE,3,"2024/03/03 13:35:00",1,VIC1,163,-67.1,0,0,"2024/03/03 13:30:04",-67.1,0,0,0,0,0,0,0.91,0.91,1.84,1.84,4.78,4.78,0.39,0.39,3.76,3.76,0,0,0,0,FIRM
 //! C,"END OF REPORT",15
 //! ```
-
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;

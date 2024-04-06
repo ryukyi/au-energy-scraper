@@ -2,31 +2,30 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::io::Cursor;
-use std::time::Instant;
 use std::io::{BufRead, BufReader};
+use std::time::Instant;
 
-use serde::Deserialize;
 use reqwest;
+use serde::Deserialize;
 use zip::ZipArchive;
 
+use crate::common::record_deserializer::{deserialize_record, DeserializeError};
 use crate::models::{
     nem_current_rooftop_pv::{RooftopPvActual, RooftopPvForecast},
-    nem_current_tradingis_reports::{Price, Interconnector},
+    nem_current_tradingis_reports::{Interconnector, Price},
 };
-use crate::common::record_deserializer::{deserialize_record, DeserializeError};
 
 pub trait RecordTypeStartsWith {
     fn matches(line: &str) -> bool;
 }
 
-
 // Define the enum for record types
 #[derive(Debug, Deserialize)]
 pub enum RecordType {
     Interconnector(Interconnector),
-    Price(Price),
+    Price(Box<Price>),
     RooftopPvActual(RooftopPvActual),
-    RooftopPvForecast(RooftopPvForecast)
+    RooftopPvForecast(RooftopPvForecast),
 }
 
 // Define the State enum based on the first 4 values of "I" rows
@@ -41,12 +40,12 @@ enum State {
 // Function to initialize and return the HashMap
 fn initialize_deserializers() -> HashMap<State, DeserializerFn> {
     let mut deserializers: HashMap<State, DeserializerFn> = HashMap::new();
-    
+
     deserializers.insert(State::Interconnector, |line| {
         deserialize_record::<Interconnector>(line).map(RecordType::Interconnector)
     });
     deserializers.insert(State::Price, |line| {
-        deserialize_record::<Price>(line).map(RecordType::Price)
+        deserialize_record::<Price>(line).map(|price| RecordType::Price(Box::new(price)))
     });
     deserializers.insert(State::RooftopPvActual, |line| {
         deserialize_record::<RooftopPvActual>(line).map(RecordType::RooftopPvActual)
@@ -68,7 +67,6 @@ impl fmt::Display for RecordType {
             RecordType::Price(data) => write!(f, "{}", data),
             RecordType::RooftopPvActual(data) => write!(f, "{}", data),
             RecordType::RooftopPvForecast(data) => write!(f, "{}", data),
-
         }
     }
 }
@@ -87,9 +85,13 @@ fn extract_identifier(line: &str) -> &str {
         }
     }
 
-    // If less than 4 commas are found, return the whole line 
+    // If less than 4 commas are found, return the whole line
     // otherwise, return up to the 4th comma
-    if commas < 4 { line } else { &line[..end] }
+    if commas < 4 {
+        line
+    } else {
+        &line[..end]
+    }
 }
 
 // Accepts an iterator so file is only read once
@@ -114,7 +116,7 @@ where
             };
         } else if line.starts_with('D') && current_state.is_some() {
             if let Some(ref state) = current_state {
-                if let Some(deserializer) = deserializers.get(&state) {
+                if let Some(deserializer) = deserializers.get(state) {
                     let record = deserializer(&line)?;
                     records.push(record);
                 }
@@ -125,10 +127,7 @@ where
     Ok(records)
 }
 
-
-pub fn unzip_and_process(
-    zip_bytes: &[u8],
-) -> Result<CsvRecordCollection, Box<dyn Error>> {
+pub fn unzip_and_process(zip_bytes: &[u8]) -> Result<CsvRecordCollection, Box<dyn Error>> {
     let start_time = Instant::now();
     let reader = Cursor::new(zip_bytes);
     let mut archive = ZipArchive::new(reader)?;
@@ -157,8 +156,6 @@ pub fn unzip_and_process(
 
     Ok(collection)
 }
-
-
 
 /// A generic collection of records with metadata.
 #[derive(Debug)]

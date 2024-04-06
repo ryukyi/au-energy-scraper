@@ -1,7 +1,7 @@
-use std::fmt;
-use std::error::Error;
-use serde::de::DeserializeOwned;
 use csv::ReaderBuilder;
+use serde::de::DeserializeOwned;
+use std::error::Error;
+use std::fmt;
 
 // Updated DeserializeError to include more context
 #[derive(Debug, PartialEq)]
@@ -75,7 +75,13 @@ mod tests {
     fn test_deserialize_record_success() {
         let line = "John Doe,30";
         let record: Result<TestRecord, _> = deserialize_record(line);
-        assert_eq!(record, Ok(TestRecord { name: "John Doe".to_string(), age: 30 }));
+        assert_eq!(
+            record,
+            Ok(TestRecord {
+                name: "John Doe".to_string(),
+                age: 30
+            })
+        );
     }
 
     #[test]
